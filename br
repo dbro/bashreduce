@@ -147,8 +147,8 @@ else
 		}'"
 fi
 
-# TODO: Merge output from hosts into one (maybe but not necessarily just
-# a re-reduce)
+# Merge output from hosts into one
+#   Maybe use the -M program, if not just sort (preferring brm)
 if which brm >>$tmp/br_stderr; then
 	BRM=brm
 elif [[ -f brutils/brm ]]; then
