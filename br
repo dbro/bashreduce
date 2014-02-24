@@ -38,6 +38,18 @@ column=1
 sort_mem=256M
 tmp=/tmp
 
+# Dependencies
+PWD=`pwd`
+# netcat-traditional (because netcat-openbsd does not support "-l" parameter)
+if which nc.traditional >>$tmp/br_stderr; then
+	NC=$(which nc.traditional)
+elif [[ -f brutils/nc.traditional ]]; then
+	NC=$PWD/brutils/nc.traditional
+else
+    echo "warning. can't find required version of netcat. attempting to use default nc"
+    NC=$(which nc)
+fi
+
 program=$(basename $0)
 while getopts "h:fm:r:M:i:o:c:S:t:?" name; do
 	case "$name" in
@@ -89,7 +101,7 @@ for host in $hosts; do
 
 	# Listen for work (remote)
 	ssh -n $host "mkdir -p $nodepath/"
-	pid=$(ssh -n $host "nc -l -p $port_out >$nodepath/$host_idx \
+	pid=$(ssh -n $host "$NC -l -p $port_out >$nodepath/$host_idx \
 		2>>$tmp/br_stderr </dev/null & jobs -l" \
 		| awk {'print $2'})
 
@@ -99,13 +111,13 @@ for host in $hosts; do
 		| LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp -k$column,$column \
 		2>>$tmp/br_stderr \
 		$map $reduce \
-		| nc -q0 -l -p $port_in >>$tmp/br_stderr &"
+		| $NC -q0 -l -p $port_in >>$tmp/br_stderr &"
 
 	# Send work (local)
-	nc $host $port_in >$jobpath/in/$host_idx &
+	$NC $host $port_in >$jobpath/in/$host_idx &
 
 	# Receive results (local)
-	nc -q0 $host $port_out <$jobpath/out/$host_idx &
+	$NC -q0 $host $port_out <$jobpath/out/$host_idx &
 	out_files="$out_files $jobpath/out/$host_idx"
 
 	# ++i
