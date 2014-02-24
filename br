@@ -14,8 +14,10 @@ usage() {
 		echo "  -f send filenames, not data, over the network," >&2
 		echo "     implies each host has a mirror of the dataset" >&2
 		echo "  -m map program (effectively defaults to cat)" >&2
-		echo "  -r reduce program" >&2
-		echo "  -M merge program" >&2
+		echo "  -r reduce program. receives output from map, still on the same host" >&2
+        # DB: why is the reduce program broken out here? it could be included with the map command
+        # and the suffle is always a sort on the column specified by -c ?
+		echo "  -M merge program. receives sorted output from all hosts' map-reduce" >&2
 		echo "  -i input file or directory (defaults to stdin)" >&2
 		echo "  -o output file (defaults to stdout)" >&2
 		echo "  -c column used by sort (defaults to 1)" >&2
@@ -49,6 +51,7 @@ else
     echo "warning. can't find required version of netcat. attempting to use default nc"
     NC=$(which nc)
 fi
+LC_order='C' # use strict C-style character sort order
 
 program=$(basename $0)
 while getopts "h:fm:r:M:i:o:c:S:t:?" name; do
@@ -83,7 +86,7 @@ cp /dev/null $tmp/br_stderr
 
 # Setup map and reduce as parts of a pipeline
 [[ -n "$map" ]] && map="| $map 2>>$tmp/br_stderr"
-[[ $filenames == true ]] && map="| xargs -n1 \
+[[ $filenames == true ]] && map="| xargs -0 -n1 \
 	sh -c 'zcat \$0 2>>$tmp/br_stderr || cat \$0 2>>$tmp/br_stderr' $map"
 [[ -n "$reduce" ]] && reduce="| $reduce 2>>$tmp/br_stderr"
 
@@ -106,9 +109,10 @@ for host in $hosts; do
 		| awk {'print $2'})
 
 	# Do work (remote)
+    # DB: changed LC_ALL to LC_C here to match sort order in brm
 	ssh -n $host "tail -s0.1 -f --pid=$pid $nodepath/$host_idx \
 		2>>$tmp/br_stderr </dev/null \
-		| LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp -k$column,$column \
+		| env LC_ALL='$LC_order' sort -S$sort_mem -T$tmp -k$column,$column \
 		2>>$tmp/br_stderr \
 		$map $reduce \
 		| $NC -q0 -l -p $port_in >>$tmp/br_stderr &"
@@ -129,8 +133,8 @@ done
 
 # Create the command to produce input
 if [[ -d "$input" ]]; then
-	input="find $input -type f |"
-	[[ $filenames == false ]] && input="$input xargs -n1 \
+	input="find $input -type f -print0 |"
+	[[ $filenames == false ]] && input="$input xargs -0 -n1 \
 		sh -c 'zcat \$0 2>>$tmp/br_stderr || cat \$0 2>>$tmp/br_stderr' |"
 elif [[ -f "$input" ]]; then
 	input="sh -c 'zcat $input 2>>$tmp/br_stderr \
@@ -170,17 +174,22 @@ elif [[ -f brutils/brm ]]; then
 	BRM=brutils/brm
 fi
 if [[ -n "$merge" ]]; then
-	eval "find $jobpath/in -type p | xargs cat \
+    # DB: by using cat here, that breaks the requirement that the input
+    # is sorted -- because it's all concatenated into one long stream
+    echo "using custom merge command" >&2
+	eval "find $jobpath/in -type p -print0 | xargs -0 cat \
 		| $merge 2>>$tmp/br_stderr ${output:+| pv >$output}"
 else
 	if [[ -n "$BRM" ]]; then
-		eval "$BRM - $(($column - 1)) $(find $jobpath/in/ -type p | xargs) \
+        echo "using brm to merge" >&2
+		eval "$BRM - $(($column - 1)) $(find $jobpath/in/ -type p -print0 | xargs -0) \
 			${output:+| pv >$output}"
 	else
+        echo "using sort -m to merge" >&2
 		# use sort -m if we don't have brm
 		# sort -m creates tmp files if too many input files are specified
 		# brm doesn't do this
-		eval "sort -k$column,$column -S$sort_mem -m $jobpath/in/* \
+		eval "env LC_ALL='$LC_order' sort -k$column,$column -S$sort_mem -m $jobpath/in/* \
 			${output:+| pv >$output}"
 	fi
 fi

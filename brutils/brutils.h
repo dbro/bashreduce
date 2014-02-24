@@ -35,9 +35,9 @@ int find_col(int col, line_t * line) {
       --col;
   }
   if (*line->col_beg == 0)
-    return 0;
+    return 0; // false, ie not found
   for (line->col_end = line->col_beg; !isspace(*line->col_end); ++line->col_end) {}
-  return 1;
+  return 1; // true, success
 }
 
 int read_parse(int col, line_t * line) {
@@ -45,10 +45,10 @@ int read_parse(int col, line_t * line) {
     if (find_col(col, line)) {
       line->col_end_val = *line->col_end;
       *line->col_end = 0;
-      return 1;
+      return 1; // true, success
     }
   }
-  return 0;
+  return 0; // false, ie column not found
 }
 
 // move end - 1 to the proper position in beg..end
@@ -63,10 +63,13 @@ void lower_bound_move(line_t ** beg, line_t ** end)
 
   // [ * * * * x ]
   // we need to move x to its correct position in the otherwise sorted array
+  // DB: this is a binary search. would it be better to use qsort?
   while (len > 0) {
     half = len >> 1;
     mid = beg + half;
-    if ( strcoll( (*mid)->col_beg, (*(end - 1))->col_beg) > 0 ) {
+    // DB: changing strcoll to strcmp (faster, maybe more consistent?).
+    // DB: the locale should be unimportant
+    if ( strcmp( (*mid)->col_beg, (*(end - 1))->col_beg) > 0 ) {
       beg = mid + 1;
       len = len - half - 1;
     }
