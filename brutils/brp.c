@@ -31,8 +31,10 @@ int main(int argc, char * argv[])
     pouts[i] = try_open(argv[i + 3], "wb");
 
   while (fgets(line.buf, sizeof(line.buf), line.pin)) {
-    if ( find_col(col_index, &line) ) // if this string has the requisite number of columns
+    if ( find_col(col_index, &line) ) {
+      // if this string has the requisite number of columns
       fputs(line.buf, pouts[fnv_hash(line.col_beg, line.col_end) % pouts_len]); // write it to the correct file
+    } // and what if it doesn't have enough columns? silently dropped
   }
 
   if (line.pin != stdin)
