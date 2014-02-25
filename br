@@ -2,6 +2,27 @@
 # bashreduce: mapreduce in bash
 # erik@fawx.com
 
+# DB notes:
+#
+# canonical mapreduce process flow, according to wikipedia
+# 1. input reader
+# 2. map (k,v) -> (k',v')
+# 3. shuffle
+# 3a. partition (k,total#) -> #index of reducer
+# 3b. compare (k1,k2) -> k1>k2 ? used to sort before reduce begins
+# 4. reduce (k', [v']) -> (k', v")
+# 4.5? merge (k',[v"]) -> (k', v^) # is this needed? probably not- can do in another MR stage later
+# 5. output writer
+#
+# br questions/limits
+# line length limit of 8kb (buffer)
+# all white space treated as delimiter
+# FNV hash uses v1 instead of v1a
+# possible ssh overhead when using localhost
+# sort order appears to be inconsistent so merge function may not work properly
+# the "reduce" is really just part 2 of the map;
+# shuffle comes after "reduce" and before "merge" programs
+
 usage() {
 	echo "Usage: $1 [-h '<host>[ <host>][...]'] [-f]" >&2
 	echo "       [-m <map>] [-r <reduce>] [-M <merge>]" >&2
