@@ -21,7 +21,46 @@
 # possible ssh overhead when using localhost
 # sort order appears to be inconsistent so merge function may not work properly
 # the "reduce" is really just part 2 of the map;
-# shuffle comes after "reduce" and before "merge" programs
+# shuffle comes after "reduce" and before "merge" programs, so it's not really
+# a distributed reduce step. all the reduction happens in the local/master node
+
+# a proper mapreduce might work like this:
+# specify the location of the input data (default stdin, but can be files or directory)
+# specify hosts that will do the work
+# specify a map stage field delimiter (default tab)
+# specify a map stage key index (default 1)
+# specify the map function
+# the master partitions the data to give all data for each key to a single node for mapping
+# use the entire row as the value in the (k,v) tuple when mapping
+# specify a shuffle stage field delimiter (default tab)
+# specify a shuffle stage key index (default 1)
+# each mapper node partitions its mapped data to group all data for each k' together for reducing
+# specify a shuffle stage comparison function to sort [v'] for each k'
+# each mapper node sorts its mapped data
+# each mapper node transmits its mapped data to the appropriate reducer
+# specify the reduce function
+# each reducer receives the mapped data and merges the sorted data for each k' together
+# use the entire row as the value in the (k,v) tuple when reducing
+# specify the location of the output data (default stdout)
+
+# can the map and reduce phases be handled similarly? the main difference appears to be the way
+# the input arrives (from one source or from multiple sources). probably makes sense to bring
+# all data back from the mappers to the master before starting any reduce jobs. In that case,
+# it could be a simple concatenation of 2 mappings, where the second "map" is actually a reduce?
+
+# partition: (k, #total) -> #index
+# compare: ((k1,v1),(k2,v2)) -> -1/0/1
+# map: (k,v) -> [(k',v')]
+# reduce: (k, [v]) -> (k, v)  -- this is sometimes imposed as a constraint to allow cascading reduce functions
+# reduce: (k, [v]) -> (k, v') -- and this is also ok. see http://en.wikipedia.org/wiki/Fold_(higher-order_function) which mentions asymmetry of types
+# in other words, in the reduce phase each "value" is a sorted list of items
+
+# so in the visitor trial/success counting, the stages might be:
+# 1. collect all requests for each visitor id, and sort by timestamp (re-sort)
+# 2. determine the test+cases and success stats for each visitor id (map, assuming sorted input)
+# 3. summarize the stats for each test+case (map)
+
+
 
 usage() {
 	echo "Usage: $1 [-h '<host>[ <host>][...]'] [-f]" >&2
