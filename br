@@ -5,15 +5,58 @@
 # DB notes:
 #
 # canonical mapreduce process flow, according to wikipedia
-# 1. input reader
-# 2. map (k,v) -> (k',v')
-# 3. shuffle
+# 1. input reader: [(k1,v1)]
+# 2. map: [(k1,v1)] -> [(k2,v2)]
+# 3. shuffle (partition + compare)
+# 4. reduce: (k2, [v2]) -> (k2, v3), where v3 might be another list
+# 5. output writer
+
+# 1a. input reader. master creates (k,v) pairs for distribution to mappers
+# 1b. data received by all mappers
+# 2. each mapper performs map for each (k,v) -> (k',v')
+# 3. shuffle to determine next destination for the data
 # 3a. partition (k,total#) -> #index of reducer
 # 3b. compare (k1,k2) -> k1>k2 ? used to sort before reduce begins
-# 4. reduce (k', [v']) -> (k', v")
-# 4.5? merge (k',[v"]) -> (k', v^) # is this needed? probably not- can do in another MR stage later
-# 5. output writer
+# 4a. each mapper sends partitioned, sorted (k',v') data to next destination
+# 4b. next destination merges the data for each k' from all mappers
+# 5. next destination gets instructions on what to do with the data
+#    (map, partition, compare)
+# 6. output writer. master stores (k', v") permanently
 #
+# in practice, this would be set up as an order list of tuples:
+# [(m,p,c)] where each tuple represents a stage of processing
+# and each node is able to send data to all the others
+# there doesn't need to be a master node if all of the steps
+# are known at all times by all nodes, and all nodes are ready
+# to give a "no data from me" message to the nodes that depend
+# on them.
+# what about failure/errors? those need to be coordinated by a master
+#
+# for example, this is a processing list for visitor trial/success counting:
+# 0m: key1=none, val1=pathspec, map=find {input_folder} -name {filespec} -> [(k2,v2)]=[({input_file},none)]
+# 0p: hash(key2) % {number_of_workers}
+# 0c: no sort needed for each key2 set (because there is only 1 member)
+# 1m: key2 = visitor_id+timestamp, val2 = $0
+# 1p: hash({visitor_id_part_of_key}) % {number_of_workers}
+# 1c: for each partition, sort by key2
+# 2m: session_analysis(val) -> k2=testcase v2=visitor_id,success_state [this is a reduce step, which assumes the input is sorted appropriately. it accumulates state as it reads sequentially]
+# 2p: =1 (send all to node1 because we expect it to be a small set)
+# 2c: sort by key2, alpha
+# 3m: summary_stats(val) -> k2=k1, v2=total counts, statistical significance test info [this is another reduce step that assumes the input is sorted appropriately. it accumulates state as it reads sequentially]
+# 3p: =1
+# 3c: =1
+# 4: output writer. should cache results based on input parameters and source file state to speed up subsequent requests for the same information.
+
+#each step specifies:
+# ?-i input files
+# -m map process. it is expected to know how to parse the records from the input data
+#    and the k1 from each record
+# -k key2 extraction function. default 'cut -f1'
+# -p partition function. input is key2 and list of outputs
+# -c compare function. for sorting each output from partition by key2
+#each step produces a set of files, one for each partition. it tells the master when it's done
+#and where the files it produced can be found. and includes log information about who it is, what it was asked to do, the input data, start/stop time and any errors or debug info
+
 # br questions/limits
 # line length limit of 8kb (buffer)
 # all white space treated as delimiter
@@ -47,6 +90,9 @@
 # the input arrives (from one source or from multiple sources). probably makes sense to bring
 # all data back from the mappers to the master before starting any reduce jobs. In that case,
 # it could be a simple concatenation of 2 mappings, where the second "map" is actually a reduce?
+
+# should each mapper be able to send data directly to the reducers?
+# probably not, because the reducer won't know when it's got a complete set of data
 
 # partition: (k, #total) -> #index
 # compare: ((k1,v1),(k2,v2)) -> -1/0/1
