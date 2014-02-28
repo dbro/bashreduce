@@ -1,0 +1,65 @@
+#!/bin/bash
+# bashreduce version of the abtest_count script which produces the
+# counts of trials and successes for AB tests.
+
+# Dan Brown, March 2014
+
+# we use a series of bashreduce tasks. this uses a new interface definition
+# which may not apply to the existing "bashreduce" scripts. So it may need
+# translation or modification of those scripts. Do that later.
+
+# dependencies and helper functions
+AWK=$(which mawk) || $(which gawk) || $(which awk)
+function join { local IFS="$1"; shift; echo "$*"; } # first argument is the separator
+awk_reverse_key="BEGIN {FS=\"\\t\"; OFS=FS} {split(\$1,a,\"+\"); \$1=a[2]\"+\"a[1]; print \$0}"
+
+# global variables
+NUM_WORKERS=4 # these are indexed starting at 1
+
+# task 1
+# session analysis. gets daily visitor activity for the relevant test(s)
+task1inputreader="" # ? what should go here? check cache? lazy evaluation? would need to know taskid and location of input file(s) in order to do a cache check
+task1keydelimiter="\t"
+task1keyindex=1
+task1rowdelimiter="\n"
+# key1= date + visitor_id [=session_id]
+# val2= entire row
+task1merge="" # not used
+#task1compare_pre="" # not used
+analysis_params="-v cookie=\"`join , ${cookie_regex[*]}`\" -v url=\"`join , ${url_regex[*]}`\" -v success_url=\"`join , ${goal_url_regex[*]}`\" -v domain=\"`join , ${domain_regex[*]}`\" -v useragent=\"`join , ${useragent_regex[*]}`\""
+task1map="$AWK -f session-analysis $analysis_params | $AWK '$awk_reverse_key'" # instead of reverse_key, could just remove the date part, because field 2 is the timestamp.
+# key2= visitor_id + date
+# val2= entire row
+task1partition="RANDOM=$(cut -d'+' -f1); echo $((RANDOM % $NUM_WORKERS + 1))" # all visitor_id data goes to the same randomly chosen worker
+#task1partition="brp2 -d'+' -f1 {job_id}{destination}" # all visitorID data goes to the same randomly chosen worker. is job_id available at this point??
+task1sort="sort -k1,1" # sort each partitioned file by the entire key. may not be necessary if each file has the same date to start with
+#task1compare_post="" # strcmp() would be good. might be too low-level?
+task1outputwriter="" # ? what should go here? write cache? file locations/names? would need to know the taskid and input file (or just the cache key) to write to the cache
+
+# task 2
+# reduce all of the daily session info for each visitor id into one row
+task2inputreader="" # ? what should go here? check cache? lazy evaluation?
+task2keydelimiter="\t"
+task2keyindex=1
+task2rowdelimiter="\n"
+# key1= visitor_id + date
+# val1= entire row
+task2merge="sort -k1,1" # merge all of the input files NOTE this needs to match the sort order in the previous task or else it will not succeed in sorting them properly
+#task2compare_pre=$task1compare # merge all of the input files
+task2map="$AWK merge-daily-test-results"
+# key2= visitor_id
+# val2= for each test that was requested, a summary of participation and success
+task2partition="RANDOM=$(cut -f1); echo $((RANDOM % $NUM_WORKERS + 1))" # all visitor_id data goes to the same randomly chosen worker
+task2sort="sort -k1,1" # sort by visitor_id, but should already by in that order
+#task2compare_post="" # strcmp() would be good. might be too low-level?
+task2outputwriter="" # ? what should go here? write cache?
+
+#task_id is a hash of the parameters that define the work to be done
+#file_fingerprint is a hash of the filepath, size, modification_timestamp
+
+# final step is to run the analysis on the combined data from above
+# $AWK test-analysis
+# this could be done in task2 - which may not benefit much from parallelization? maybe it would in multi-week reports though
+
+
+
