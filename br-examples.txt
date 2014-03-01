@@ -1,5 +1,5 @@
 # word count example. first, the normal approach without bashreduce
-danbrown@swordfish:~/src/bashreduce$ cat br | paste -s | tr -s [:space:] '\n' | sort | uniq -c | sort -bnrk1 | head
+danbrown@swordfish:~/src/bashreduce$ cat br | tr -s '[:space:]' '\n' | LC_COLLATE=C sort | uniq -c | sort -bnrk1 | head
      25 #
      18 echo
      17 >&2
@@ -12,11 +12,11 @@ danbrown@swordfish:~/src/bashreduce$ cat br | paste -s | tr -s [:space:] '\n' | 
       9 -n
 
 # now, the bashreduce equivalent, single-process
-danbrown@swordfish:~/src/bashreduce$ ./br -i br -h "localhost" -m "paste -s | tr -s [:space:] '\n'" -r "sort | uniq -c" -M "sort -bnrk1" | head
+danbrown@swordfish:~/src/bashreduce$ ./br -i br -h "localhost" -m "paste -s | tr -s '[:space:]' '\n'" -r "LC_COLLATE=C sort | uniq -c" -M "LC_COLLATE=C sort -bnrk1" | head
 # parallel the bashreduce equivalent
-danbrown@swordfish:~/src/bashreduce$ ./br -i br -h "localhost localhost" -m "paste -s | tr -s [:space:] '\n'" -r "sort | uniq -c" -M "sort -bnrk1" | head
+danbrown@swordfish:~/src/bashreduce$ ./br -i br -h "localhost localhost" -m "paste -s | tr -s '[:space:]' '\n'" -r "LC_COLLATE=C sort | uniq -c" -M "LC_COLLATE=C sort -bnrk1" | head
 # what happens if the -M merge parameter is removed?
-danbrown@swordfish:~/src/bashreduce$ ./br -i br -h "localhost" -m "paste -s | tr -s [:space:] '\n'" -r "sort | uniq -c" | head
+danbrown@swordfish:~/src/bashreduce$ ./br -i br -h "localhost" -m "paste -s | tr -s '[:space:]' '\n'" -r "LC_COLLATE=C sort | uniq -c" | head
       1 
       1 =
       2 ==

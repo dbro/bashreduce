@@ -22,7 +22,7 @@ unsigned int fnv_hash(const char *p, const char *end) {
 
 typedef struct
 {
-  char buf[8192];
+  char buf[8192]; // is this too small?
   char * col_beg;
   char * col_end;
   char col_end_val;
@@ -31,12 +31,12 @@ typedef struct
 
 int find_col(int col, line_t * line) {
   for (line->col_beg = line->buf; col != 0 && *line->col_beg != 0; ++line->col_beg) {
-    if ( isspace(*line->col_beg) )
+    if ( isspace(*line->col_beg) ) // use a delimiter instead of any white space
       --col;
   }
   if (*line->col_beg == 0)
     return 0; // false, ie not found
-  for (line->col_end = line->col_beg; !isspace(*line->col_end); ++line->col_end) {}
+  for (line->col_end = line->col_beg; !isspace(*line->col_end); ++line->col_end) {} // use delimiter
   return 1; // true, success
 }
 
@@ -68,7 +68,8 @@ void lower_bound_move(line_t ** beg, line_t ** end)
     half = len >> 1;
     mid = beg + half;
     // DB: changing strcoll to strcmp (faster, maybe more consistent?).
-    // DB: the locale should be unimportant
+    // DB: the locale should be consistent between brm and sort, so use
+    // strcmp here and LC_COLLATE=C as a prefix to sort elsewhere
     if ( strcmp( (*mid)->col_beg, (*(end - 1))->col_beg) > 0 ) {
       beg = mid + 1;
       len = len - half - 1;

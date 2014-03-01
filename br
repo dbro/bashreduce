@@ -59,12 +59,12 @@
 
 # br questions/limits
 # line length limit of 8kb (buffer)
-# all white space treated as delimiter
-# FNV hash uses v1 instead of v1a
+# all white space treated as delimiter. better to specify the delimiter
+# OK. FNV hash uses v1 instead of v1a
 # possible ssh overhead when using localhost
-# sort order appears to be inconsistent so merge function may not work properly
-# the "reduce" is really just part 2 of the map;
-# shuffle comes after "reduce" and before "merge" programs, so it's not really
+# FIXED. sort order appears to be inconsistent so merge function may not work properly
+# OK. the "reduce" is really just part 2 of the map;
+# OK. shuffle comes after "reduce" and before "merge" programs, so it's not really
 # a distributed reduce step. all the reduction happens in the local/master node
 
 # a proper mapreduce might work like this:
@@ -218,7 +218,7 @@ for host in $hosts; do
     # DB: changed LC_ALL to LC_C here to match sort order in brm
 	ssh -n $host "tail -s0.1 -f --pid=$pid $nodepath/$host_idx \
 		2>>$tmp/br_stderr </dev/null \
-		| env LC_ALL='$LC_order' sort -S$sort_mem -T$tmp -k$column,$column \
+		| LC_COLLATE=C sort -S$sort_mem -T$tmp -k$column,$column \
 		2>>$tmp/br_stderr \
 		$map $reduce \
 		| $NC -q0 -l -p $port_in >>$tmp/br_stderr &"
@@ -295,7 +295,7 @@ else
 		# use sort -m if we don't have brm
 		# sort -m creates tmp files if too many input files are specified
 		# brm doesn't do this
-		eval "env LC_ALL='$LC_order' sort -k$column,$column -S$sort_mem -m $jobpath/in/* \
+		eval "LC_COLLATE=C sort -k$column,$column -S$sort_mem -m $jobpath/in/* \
 			${output:+| pv >$output}"
 	fi
 fi

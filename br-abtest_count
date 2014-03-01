@@ -12,12 +12,14 @@
 AWK=$(which mawk) || $(which gawk) || $(which awk)
 function join { local IFS="$1"; shift; echo "$*"; } # first argument is the separator
 awk_reverse_key="BEGIN {FS=\"\\t\"; OFS=FS} {split(\$1,a,\"+\"); \$1=a[2]\"+\"a[1]; print \$0}"
+awk_drop_first_part_of_key="BEGIN {FS=\"\\t\"; OFS=FS} {split(\$1,a,\"+\"); \$1=a[2]; print \$0}"
 
 # global variables
 NUM_WORKERS=4 # these are indexed starting at 1
 
 # task 1
 # session analysis. gets daily visitor activity for the relevant test(s)
+# assumes the input is sorted by session_id (date+visitor_id) without any missing data
 task1inputreader="" # ? what should go here? check cache? lazy evaluation? would need to know taskid and location of input file(s) in order to do a cache check
 task1keydelimiter="\t"
 task1keyindex=1
@@ -27,14 +29,16 @@ task1rowdelimiter="\n"
 task1merge="" # not used
 #task1compare_pre="" # not used
 analysis_params="-v cookie=\"`join , ${cookie_regex[*]}`\" -v url=\"`join , ${url_regex[*]}`\" -v success_url=\"`join , ${goal_url_regex[*]}`\" -v domain=\"`join , ${domain_regex[*]}`\" -v useragent=\"`join , ${useragent_regex[*]}`\""
-task1map="$AWK -f session-analysis $analysis_params | $AWK '$awk_reverse_key'" # instead of reverse_key, could just remove the date part, because field 2 is the timestamp.
-# key2= visitor_id + date
-# val2= entire row
-task1partition="RANDOM=$(cut -d'+' -f1); echo $((RANDOM % $NUM_WORKERS + 1))" # all visitor_id data goes to the same randomly chosen worker
-#task1partition="brp2 -d'+' -f1 {job_id}{destination}" # all visitorID data goes to the same randomly chosen worker. is job_id available at this point??
-task1sort="sort -k1,1" # sort each partitioned file by the entire key. may not be necessary if each file has the same date to start with
+task1map="$AWK -f session-analysis $analysis_params | $AWK '$awk_reverse_key'"
+# key2= visitor_id+date
+# val2= entire row, which includes info about one or more tests
+#task1partition="RANDOM=$(cut -d'+' -f1); echo $((RANDOM % $NUM_WORKERS + 1))" # all visitor_id data goes to the same randomly chosen worker
+task1partition="brp map-output-via-stdin 1 $(seq 1 $NUM_WORKERS)" # all visitorID data goes to the same randomly chosen worker. is job_id available at this point??
+task1sort="" # don't need to sort again because the input files contain only one date
+#task1sort="LC_COLLATE=C sort -k1,1" # sort each partitioned file by the visitor_entire key. may not be necessary if each file has the same date to start with
 #task1compare_post="" # strcmp() would be good. might be too low-level?
 task1outputwriter="" # ? what should go here? write cache? file locations/names? would need to know the taskid and input file (or just the cache key) to write to the cache
+# how to receive multiple files? tar? still would want to cache individual files
 
 # task 2
 # reduce all of the daily session info for each visitor id into one row
